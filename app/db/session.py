@@ -1,15 +1,22 @@
-# app/db/session.py
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-
-# 1. 从我们的新配置文件中导入 settings
 from app.core.config import settings
+from typing import AsyncGenerator # (关键修复) 导入 AsyncGenerator
 
-# 2. 使用 settings.DATABASE_URL 来创建 engine
-engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True)
-async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+# 调用 get_database_url() 方法来获取连接字符串
+engine = create_async_engine(settings.get_database_url(), pool_pre_ping=True)
 
-async def get_db():
-    """FastAPI 依赖项，用于获取数据库会话。"""
-    async with async_session() as session:
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    一个异步生成器，用于提供数据库会话的依赖注入。
+    """
+    async with SessionLocal() as session:
         yield session

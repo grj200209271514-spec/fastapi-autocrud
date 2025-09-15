@@ -1,88 +1,91 @@
 import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager  # (关键修复 1) 确保导入
 from fastapi import FastAPI
+import os
+from typing import Union
+from pathlib import Path
 
-# 从项目根目录导入 logging_config。
-# 注意：这个导入依赖于 run.py 脚本将项目根目录添加到了 sys.path 中。
-from logging_config import LOG_DIR, LOGGERS_TO_SETUP
+from app.core.logging_config import LOG_DIR
 from app.db.cache import init_redis_pool, close_redis_pool
 from app.db.session import engine
-from models import Base
+from app.models import Base
 
-user_activity_logger = logging.getLogger("user_activity")
+logger = logging.getLogger(__name__)
 
 
 async def create_db_and_tables():
     """在应用启动时异步创建所有数据库表。"""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    user_activity_logger.info("Database tables checked/created.")
+    logger.info("数据库表已检查/创建。")
 
 
-async def cleanup_logs():
-    """
-    (优化后) 动态地从日志配置中获取所有日志文件并进行清理。
-    """
-    # 关键修改：不再硬编码文件名，而是从 LOGGERS_TO_SETUP 动态生成列表
-    # 这确保了将来你新增任何日志文件，它都会被自动纳入清理范围
-    log_files = [LOG_DIR / config["filename"] for config in LOGGERS_TO_SETUP]
-
-    target_files_str = ", ".join(f.name for f in log_files)
-    user_activity_logger.info(f"Starting scheduled log cleanup. Targets: [{target_files_str}]")
-
+# (关键修复 1) 让 cleanup_logs 函数接收一个路径参数
+async def cleanup_logs(log_dir: Union[Path, str]):
+    """明确地清理所有目标日志文件。"""
+    LOG_DIR = Path(log_dir)
+    log_filenames = ["info.log", "error.log", "api_traffic.log"]
+    log_files = [LOG_DIR / filename for filename in log_filenames]
+    # ... (函数其余部分不变)
+    target_files_str = ", ".join(log_filenames)
+    logger.info(f"开始定时清理日志。目标文件: [{target_files_str}]")
     for log_file in log_files:
         if log_file.exists():
             try:
-                # 使用 'w' 模式打开文件会立即清空其内容
-                with open(log_file, "w") as f:
+                with open(log_file, "w", encoding='utf-8') as f:
                     pass
-                user_activity_logger.info(f"Successfully cleared log file: {log_file.name}")
+                logger.info(f"成功清理日志文件: {log_file.name}")
             except Exception as e:
-                user_activity_logger.error(f"Failed to clear log file {log_file.name}: {e}", exc_info=True)
+                logger.error(f"清理日志文件 {log_file.name} 失败: {e}", exc_info=True)
         else:
-            user_activity_logger.info(f"Log file not found, skipping cleanup: {log_file.name}")
+            logger.info(f"日志文件未找到，跳过清理: {log_file.name}")
 
 
-async def scheduled_log_cleanup():
+# (关键修复 2) 让 scheduled_log_cleanup 函数接收并传递路径参数
+async def scheduled_log_cleanup(log_dir: Union[Path, str]):
     """一个无限循环的后台任务，定期执行日志清理。"""
     while True:
         try:
-            # 等待 30 分钟
-            await asyncio.sleep(30 * 60)
-            await cleanup_logs()
+            await asyncio.sleep(1 * 60)
+            await cleanup_logs(log_dir)
         except asyncio.CancelledError:
-            user_activity_logger.info("Log cleanup scheduler is stopping gracefully.")
+            logger.info("日志清理调度器正在正常停止。")
             break
         except Exception as e:
-            user_activity_logger.error(f"An error occurred in the log cleanup scheduler: {e}", exc_info=True)
+            logger.error(f"日志清理调度器发生错误: {e}", exc_info=True)
             await asyncio.sleep(60)
 
 
+# (关键修复 2) 添加回 @asynccontextmanager 装饰器
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 的生命周期管理器。"""
-    # --- 启动时执行 ---
-    user_activity_logger.info("Application startup...")
+
+    if os.getenv("TESTING"):
+        logger.info("检测到测试环境，跳过应用生命周期事件。")
+        yield
+        return
+
+    logger.info("应用启动中...")
     await create_db_and_tables()
     try:
         await init_redis_pool()
     except Exception as e:
-        user_activity_logger.critical(f"FATAL: Failed to initialize Redis. Error: {e}")
-        raise RuntimeError("Failed to connect to required service: Redis") from e
+        logger.critical(f"致命错误: 初始化 Redis 失败。错误: {e}")
+        raise RuntimeError("连接到必要的服务失败: Redis") from e
 
-    user_activity_logger.info("Starting background tasks...")
-    cleanup_task = asyncio.create_task(scheduled_log_cleanup())
+    logger.info("正在启动后台任务...")
+    cleanup_task = asyncio.create_task(scheduled_log_cleanup(LOG_DIR))
 
     yield
 
-    # --- 关闭时执行 ---
-    user_activity_logger.info("Application shutdown...")
-    user_activity_logger.info("Stopping background tasks.")
+    logger.info("应用关闭中...")
+    logger.info("正在停止后台任务。")
     cleanup_task.cancel()
     await close_redis_pool()
     try:
         await cleanup_task
     except asyncio.CancelledError:
-        user_activity_logger.info("Log cleanup task was cancelled successfully.")
+        logger.info("日志清理任务已成功取消。")
 

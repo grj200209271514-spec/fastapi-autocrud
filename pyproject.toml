@@ -1,0 +1,44 @@
+# pyproject.toml
+
+# (1) 构建系统配置 (保持不变)
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+# (2) 项目元数据
+[project]
+name = "my-fastapi-scaffold"
+version = "0.1.7"
+authors = [
+  { name="Your Name", email="your.email@example.com" },
+]
+description = "一个功能完备的企业级 FastAPI 脚手架"
+readme = "README.md"
+requires-python = ">=3.9"
+
+# (关键修复 2) 使用新的 license 字段来声明许可证
+license = { text = "MIT" }
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    # 不再需要下面这行
+    # "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Framework :: FastAPI",
+]
+
+# (3) 核心依赖项 (保持不变)
+dependencies = [
+    "fastapi[all]",
+    "SQLAlchemy==2.0.41",
+    "pydantic-settings",
+    "aiomysql",
+    "asyncmy",
+    "redis",
+    "fastcrud==0.16.0",
+]
+
+# --- (关键修复 1) 添加 setuptools 的包查找配置 ---
+# 明确告诉 setuptools 只查找并包含 'app' 开头的包
+[tool.setuptools.packages.find]
+include = ["app*"]
