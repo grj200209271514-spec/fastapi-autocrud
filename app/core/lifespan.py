@@ -43,11 +43,11 @@ async def cleanup_logs(log_dir: Union[Path, str]):
 
 
 # (关键修复 2) 让 scheduled_log_cleanup 函数接收并传递路径参数
-async def scheduled_log_cleanup(log_dir: Union[Path, str]):
+async def scheduled_log_cleanup(log_dir: Union[Path, str],minute:int):
     """一个无限循环的后台任务，定期执行日志清理。"""
     while True:
         try:
-            await asyncio.sleep(1 * 60)
+            await asyncio.sleep(minute * 60)
             await cleanup_logs(log_dir)
         except asyncio.CancelledError:
             logger.info("日志清理调度器正在正常停止。")
@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("连接到必要的服务失败: Redis") from e
 
     logger.info("正在启动后台任务...")
-    cleanup_task = asyncio.create_task(scheduled_log_cleanup(LOG_DIR))
+    cleanup_task = asyncio.create_task(scheduled_log_cleanup(LOG_DIR,1))
 
     yield
 
