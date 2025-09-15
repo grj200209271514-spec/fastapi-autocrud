@@ -1,0 +1,7 @@
+{
+  "devDependencies": {
+    "ejs": "^3.1.10",
+    "fs-extra": "^11.3.1",
+    "inquirer": "^8.2.7"
+  }
+}
