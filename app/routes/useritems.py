@@ -64,7 +64,15 @@ async def _get_by_id_handler(payload: dict, db: AsyncSession, redis: AsyncRedis)
 async def _get_all_handler(payload: dict, db: AsyncSession, redis: AsyncRedis):
     offset = payload.get("offset", 0)
     limit = payload.get("limit", 100)
-    orm_list, total_count = await crud_instance.get_multi(db=db, offset=offset, limit=limit)
+
+    # (关键修复) 1. 接收完整的字典响应
+    multi_response = await crud_instance.get_multi(db=db, offset=offset, limit=limit)
+
+    # (关键修复) 2. 通过键来正确地获取数据和总数
+    orm_list = multi_response['data']
+    total_count = multi_response['total_count']
+
+    # orm_list, total_count = await crud_instance.get_multi(db=db, offset=offset, limit=limit)
     pydantic_list = [UseritemsRead.model_validate(item) for item in orm_list]
     total_pages = math.ceil(total_count / limit) if limit > 0 else 0
     current_page = (offset // limit) + 1 if limit > 0 else 1

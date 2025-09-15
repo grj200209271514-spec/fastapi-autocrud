@@ -65,10 +65,17 @@ async def _get_item_by_id_handler(payload: dict, db: AsyncSession, redis: AsyncR
 
 
 async def _get_all_items_handler(payload: dict, db: AsyncSession, redis: AsyncRedis):
-    offset = payload.get("offset", 0)
-    limit = payload.get("limit", 100)
-    items_orm_list, total_count = await item_crud.get_multi(db=db, offset=offset, limit=limit)
+    offset = int(payload.get("offset", 0))
+    limit = int(payload.get("limit", 100))
+
+    multi_response = await item_crud.get_multi(db=db, offset=offset, limit=limit)
+    # (关键修复) 2. 通过键来正确地获取数据和总数
+    items_orm_list = multi_response['data']
+    total_count = multi_response['total_count']
+    # items_orm_list, total_count = await item_crud.get_multi(db=db, offset=offset, limit=limit)
+
     items_list = [ItemRead.model_validate(item) for item in items_orm_list]
+
     total_pages = math.ceil(total_count / limit) if limit > 0 else 0
     current_page = (offset // limit) + 1 if limit > 0 else 1
     pagination_meta = {"pagination": PaginationMeta(total_items=total_count, total_pages=total_pages, current_page=current_page, page_size=limit).model_dump()}
