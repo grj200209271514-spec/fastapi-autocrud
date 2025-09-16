@@ -15,7 +15,6 @@ api_traffic_logger = logging.getLogger("api_traffic")
 
 PUBLIC_PATHS = {"/docs", "/openapi.json", "/favicon.ico"}
 
-
 async def log_and_validate_requests(request: Request, call_next):
     """
     一个健壮的中间件，现在统一处理所有 AppException。
